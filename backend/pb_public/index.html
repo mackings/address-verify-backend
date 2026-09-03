@@ -74,6 +74,7 @@ const el = (html) => { const t = document.createElement("template"); t.innerHTML
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 const icons = () => lucide.createIcons({ attrs: { class: "icon" } });
 const fdate = (s) => s ? new Date(s).toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" }) : "—";
+const fdt = (s) => s ? new Date(s).toLocaleString(undefined, { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" }) : "—";
 const initials = (n) => (n||"?").trim().split(/\s+/).slice(0,2).map(x=>x[0]?.toUpperCase()||"").join("");
 
 const VERDICT = {
@@ -368,20 +369,52 @@ function renderCerts(host){
 
 function renderVerifs(host){
   const rows = state.verifs.filter(v =>
-    (!state.status || v.status === state.status) && matchQ(`${v.claimed_address} ${v.id}`));
+    (!state.status || v.status === state.status) &&
+    matchQ(`${v.claimed_address} ${v.holder_name} ${v.holder_email} ${v.id}`));
   if (!rows.length){ host.innerHTML = emptyState("No verifications match your filters."); return; }
-  const body = rows.map(v => `
-    <tr data-id="${v.id}" class="cursor-pointer transition hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
-      <td class="max-w-[320px] px-4 py-3">
-        <div class="truncate text-sm font-medium">${esc(v.claimed_address)}</div>
-        <div class="font-mono text-[11px] text-zinc-400">${(+v.claimed_lat).toFixed(4)}, ${(+v.claimed_lng).toFixed(4)} · ${v.radius_m} m</div>
-      </td>
-      <td class="px-4 py-3">${pill(VSTATUS, v.status)}</td>
-      <td class="whitespace-nowrap px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">${v.window_days} days<div class="text-xs text-zinc-500">ends ${fdate(v.window_end)}</div></td>
-      <td class="whitespace-nowrap px-4 py-3 text-sm">${v.nights_required} nights</td>
-      <td class="whitespace-nowrap px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300">${fdate(v.started_at)}</td>
-    </tr>`).join("");
-  host.innerHTML = tableShell(["Claimed address","Status","Window","Requires","Started"], body);
+
+  // group by holder
+  const groups = {};
+  for (const v of rows){
+    const k = v.holder_email || v.user || "unknown";
+    (groups[k] ||= { name: v.holder_name, email: v.holder_email, items: [] }).items.push(v);
+  }
+  const ordered = Object.values(groups).sort((a,b) =>
+    (b.items[0]?.created || "").localeCompare(a.items[0]?.created || ""));
+
+  host.innerHTML = "";
+  for (const g of ordered){
+    g.items.sort((a,b) => (b.created||"").localeCompare(a.created||""));
+    const attempts = g.items.length;
+    const panel = h(`<div class="mb-4 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <div class="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-zinc-200 text-xs font-bold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">${esc(initials(g.name))}</div>
+        <div class="min-w-0">
+          <div class="truncate text-sm font-semibold">${esc(g.name || "—")}</div>
+          <div class="truncate text-xs text-zinc-500">${esc(g.email || "")}</div>
+        </div>
+        <span class="ml-auto rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] text-zinc-500 dark:border-zinc-700">${attempts} attempt${attempts>1?"s":""}</span>
+      </div>
+      <table class="w-full"><tbody class="divide-y divide-zinc-100 dark:divide-zinc-800/60"></tbody></table>
+    </div>`);
+    const tb = panel.querySelector("tbody");
+    g.items.forEach(v => {
+      const cancelledAt = v.status === "cancelled" ? v.updated : null;
+      const tr = h(`<tr data-id="${v.id}" class="cursor-pointer transition hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
+        <td class="max-w-[300px] px-4 py-3">
+          <div class="truncate text-sm">${esc(v.claimed_address)}</div>
+          <div class="font-mono text-[11px] text-zinc-400">${(+v.claimed_lat).toFixed(4)}, ${(+v.claimed_lng).toFixed(4)}</div>
+        </td>
+        <td class="px-4 py-3">${pill(VSTATUS, v.status)}</td>
+        <td class="whitespace-nowrap px-4 py-3 text-xs text-zinc-500">
+          added ${fdt(v.created)}<br>
+          ${cancelledAt ? "cancelled " + fdt(cancelledAt) : "window ends " + fdate(v.window_end)}
+        </td>
+      </tr>`);
+      tb.append(tr);
+    });
+    host.append(panel);
+  }
   host.querySelectorAll("[data-id]").forEach(tr => tr.onclick = () => {
     const v = state.verifs.find(x => x.id === tr.dataset.id);
     const cert = state.certs.find(c => c.verification === v.id);
@@ -492,21 +525,29 @@ function toast(msg, ok){
 }
 
 const facts = (v) => kv([
+  ["Holder", `${esc(v.holder_name || "—")}${v.holder_email ? ` <span class="text-zinc-400">· ${esc(v.holder_email)}</span>` : ""}`],
   ["Claimed address", esc(v.claimed_address)],
   ["Coordinates", `<span class="font-mono text-xs">${(+v.claimed_lat).toFixed(6)}, ${(+v.claimed_lng).toFixed(6)}</span>`],
   ["Match radius", `${v.radius_m} m`],
+  ["Added", fdt(v.created)],
   ["Window", `${fdate(v.started_at)} – ${fdate(v.window_end)} (${v.window_days} days)`],
+  ...(v.status === "cancelled" ? [["Cancelled", fdt(v.updated)]] : []),
   ["Requires", `${v.nights_required} nights present`],
 ]);
 
 function openVerif(v){
   if (v.status === "pending_review") return openReview(v);
+  const cancelled = v.status === "cancelled";
   openDrawer(`
-    ${drawerHead("Verification", pill(VSTATUS, v.status))}
+    ${drawerHead(v.holder_name || "Verification", pill(VSTATUS, v.status))}
     <div class="flex-1 space-y-5 overflow-y-auto p-5 animate-fade-in">
-      <p class="flex gap-2 rounded-lg border border-brand-200 bg-brand-50 p-3 text-xs text-brand-700 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300">
-        <i data-lucide="radar" class="!w-4 !h-4 shrink-0"></i>
-        Tracking window is ${v.status === "active" ? "in progress" : v.status}. No certificate yet.
+      <p class="flex gap-2 rounded-lg border p-3 text-xs ${cancelled
+        ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300"
+        : "border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300"}">
+        <i data-lucide="${cancelled ? "x-circle" : "radar"}" class="!w-4 !h-4 shrink-0"></i>
+        ${cancelled
+          ? "The holder cancelled this address. Location data collected for it has been deleted."
+          : `Tracking window is ${v.status === "active" ? "in progress" : v.status}. No certificate yet.`}
       </p>
       ${facts(v)}
     </div>`);
