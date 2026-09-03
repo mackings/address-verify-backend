@@ -94,7 +94,17 @@ const pill = (map, key) => {
     <span class="h-1.5 w-1.5 rounded-full ${v.dot}"></span>${v.label}</span>`;
 };
 
-const state = { tab:"certificates", q:"", verdict:"", status:"", certs:[], verifs:[], loading:true };
+const state = { tab:"verifications", q:"", verdict:"", status:"", certs:[], verifs:[], loading:true };
+
+const STATUS_ORDER = { pending_review: 0, active: 1, certified: 2, cancelled: 3 };
+
+function copyText(text, btn){
+  const done = () => { if (btn){ const o = btn.innerHTML; btn.innerHTML = '<i data-lucide="check" class="!w-3.5 !h-3.5"></i>'; icons(); setTimeout(() => { btn.innerHTML = o; icons(); }, 1200); } };
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done).catch(()=>{});
+  else { const t = document.createElement("textarea"); t.value = text; document.body.append(t); t.select(); try{ document.execCommand("copy"); }catch(e){} t.remove(); done(); }
+}
+const copyBtn = (text) => `<button data-copy="${esc(text)}" title="Copy address" class="ml-1 inline-grid h-6 w-6 shrink-0 place-items-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"><i data-lucide="copy" class="!w-3.5 !h-3.5"></i></button>`;
+function wireCopy(host){ host.querySelectorAll("[data-copy]").forEach(b => b.onclick = e => { e.stopPropagation(); copyText(b.dataset.copy, b); }); }
 
 function boot(){
   if (!pb.authStore.isValid || pb.authStore.record?.collectionName !== "staff") return renderLogin();
@@ -379,21 +389,27 @@ function renderVerifs(host){
     const k = v.holder_email || v.user || "unknown";
     (groups[k] ||= { name: v.holder_name, email: v.holder_email, items: [] }).items.push(v);
   }
+  // people with something awaiting review first, then most recent activity
+  const rank = (g) => Math.min(...g.items.map(v => STATUS_ORDER[v.status] ?? 9));
   const ordered = Object.values(groups).sort((a,b) =>
+    rank(a) - rank(b) ||
     (b.items[0]?.created || "").localeCompare(a.items[0]?.created || ""));
 
   host.innerHTML = "";
   for (const g of ordered){
-    g.items.sort((a,b) => (b.created||"").localeCompare(a.created||""));
+    g.items.sort((a,b) =>
+      (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) ||
+      (b.created||"").localeCompare(a.created||""));
     const attempts = g.items.length;
-    const panel = h(`<div class="mb-4 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-      <div class="flex items-center gap-3 border-b border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900/50">
-        <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full border border-zinc-200 text-xs font-bold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">${esc(initials(g.name))}</div>
+    const needsReview = g.items.some(v => v.status === "pending_review");
+    const panel = h(`<div class="mb-4 overflow-hidden rounded-xl border ${needsReview ? "border-amber-300 dark:border-amber-500/40" : "border-zinc-200 dark:border-zinc-800"}">
+      <div class="flex items-center gap-3 border-b px-4 py-3 ${needsReview ? "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10" : "border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50"}">
+        <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-zinc-300 text-xs font-bold text-zinc-600 dark:border-zinc-600 dark:text-zinc-300">${esc(initials(g.name))}</div>
         <div class="min-w-0">
-          <div class="truncate text-sm font-semibold">${esc(g.name || "—")}</div>
+          <div class="truncate text-sm font-bold">${esc(g.name || "Unknown")}</div>
           <div class="truncate text-xs text-zinc-500">${esc(g.email || "")}</div>
         </div>
-        <span class="ml-auto rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] text-zinc-500 dark:border-zinc-700">${attempts} attempt${attempts>1?"s":""}</span>
+        ${needsReview ? `<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white">Needs review</span>` : `<span class="ml-auto rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] text-zinc-500 dark:border-zinc-700">${attempts} attempt${attempts>1?"s":""}</span>`}
       </div>
       <table class="w-full"><tbody class="divide-y divide-zinc-100 dark:divide-zinc-800/60"></tbody></table>
     </div>`);
@@ -401,12 +417,15 @@ function renderVerifs(host){
     g.items.forEach(v => {
       const cancelledAt = v.status === "cancelled" ? v.updated : null;
       const tr = h(`<tr data-id="${v.id}" class="cursor-pointer transition hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
-        <td class="max-w-[300px] px-4 py-3">
-          <div class="truncate text-sm">${esc(v.claimed_address)}</div>
-          <div class="font-mono text-[11px] text-zinc-400">${(+v.claimed_lat).toFixed(4)}, ${(+v.claimed_lng).toFixed(4)}</div>
+        <td class="px-4 py-3">
+          <div class="flex items-start gap-1">
+            <span class="text-sm">${esc(v.claimed_address)}</span>
+            ${copyBtn(v.claimed_address)}
+          </div>
+          <div class="font-mono text-[11px] text-zinc-400">${(+v.claimed_lat).toFixed(5)}, ${(+v.claimed_lng).toFixed(5)}</div>
         </td>
-        <td class="px-4 py-3">${pill(VSTATUS, v.status)}</td>
-        <td class="whitespace-nowrap px-4 py-3 text-xs text-zinc-500">
+        <td class="px-4 py-3 align-top">${pill(VSTATUS, v.status)}</td>
+        <td class="whitespace-nowrap px-4 py-3 align-top text-xs text-zinc-500">
           added ${fdt(v.created)}<br>
           ${cancelledAt ? "cancelled " + fdt(cancelledAt) : "window ends " + fdate(v.window_end)}
         </td>
@@ -420,6 +439,7 @@ function renderVerifs(host){
     const cert = state.certs.find(c => c.verification === v.id);
     cert ? openCert(cert) : openVerif(v);
   });
+  wireCopy(host);
 }
 
 /* =================== DRAWER =================== */
@@ -461,7 +481,9 @@ function nightGrid(nights){
 }
 
 const kv = (rows) => `<dl class="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2 text-sm">
-  ${rows.map(([k,v]) => `<dt class="text-zinc-500">${k}</dt><dd class="font-medium break-words">${v}</dd>`).join("")}</dl>`;
+  ${rows.map(([k,v]) => `<dt class="text-zinc-500">${k}</dt><dd class="select-text font-medium break-words">${v}</dd>`).join("")}</dl>`;
+
+const addrVal = (text) => `<span class="inline-flex items-start gap-1"><span class="select-text">${esc(text)}</span>${copyBtn(text)}</span>`;
 
 const drawerHead = (title, right) => `
   <div class="flex items-center gap-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
@@ -503,7 +525,7 @@ function openCert(c){
         ${kv([
           ["Holder", esc(c.holder_name || "—")],
           ["Email", esc(c.holder_email || "—")],
-          ["Address", esc(c.address)],
+          ["Address", addrVal(c.address)],
           ["Coordinates", `<span class="font-mono text-xs">${(+c.lat).toFixed(6)}, ${(+c.lng).toFixed(6)}</span>`],
           ["Window", `${fdate(c.window_start)} – ${fdate(c.window_end)}`],
           ["Issued", fdate(c.issued_at)],
@@ -526,7 +548,7 @@ function toast(msg, ok){
 
 const facts = (v) => kv([
   ["Holder", `${esc(v.holder_name || "—")}${v.holder_email ? ` <span class="text-zinc-400">· ${esc(v.holder_email)}</span>` : ""}`],
-  ["Claimed address", esc(v.claimed_address)],
+  ["Claimed address", addrVal(v.claimed_address)],
   ["Coordinates", `<span class="font-mono text-xs">${(+v.claimed_lat).toFixed(6)}, ${(+v.claimed_lng).toFixed(6)}</span>`],
   ["Match radius", `${v.radius_m} m`],
   ["Added", fdt(v.created)],
