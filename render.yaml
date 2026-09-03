@@ -1,0 +1,54 @@
+# Render Blueprint.  New +  ->  Blueprint  ->  select the repo.
+#
+# One service: PocketBase serves the API, the migrations/hooks, AND the staff
+# dashboard (pb_public/) at the service root. There is no separate frontend to
+# deploy — the dashboard lives at https://<service>.onrender.com/ and the API
+# at /api, the public certificate pages at /cert/<ref>.
+#
+# FREE TIER = no persistent disk. The SQLite database is lost on every deploy,
+# restart, and the ~15-min idle spin-down. Collections re-provision and the
+# superuser is recreated each boot, but issued certificates and enrolled users
+# do NOT survive. For a product that issues certificates people rely on, use
+# ONE of:
+#   * plan: starter  + the disk block below  (~$7.25/mo, simplest)
+#   * plan: free     + LITESTREAM_* env vars pointing at an R2 / B2 bucket
+
+services:
+  - type: web
+    name: address-verify
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8080
+      # Superuser — recreated each boot. Set in the dashboard, never commit.
+      - key: PB_SUPERUSER_EMAIL
+        sync: false
+      - key: PB_SUPERUSER_PASSWORD
+        sync: false
+      # Secret used to sign certificates. Generate a long random value.
+      - key: CERT_SIGNING_SECRET
+        generateValue: true
+      # Public base URL — goes in certificate emails as the /cert link.
+      - key: APP_URL
+        sync: false
+      # --- free-tier persistence via object storage (optional) ---
+      - key: LITESTREAM_BUCKET
+        sync: false
+      - key: LITESTREAM_ENDPOINT
+        sync: false
+      - key: LITESTREAM_ACCESS_KEY_ID
+        sync: false
+      - key: LITESTREAM_SECRET_ACCESS_KEY
+        sync: false
+
+    # --- paid persistence: set plan: starter and uncomment ---
+    # disk:
+    #   name: pb-data
+    #   mountPath: /pb/pb_data
+    #   sizeGB: 1

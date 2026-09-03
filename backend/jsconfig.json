@@ -1,0 +1,11 @@
+{
+  "//": "These files run inside PocketBase's embedded JS engine (Goja), not Node. They use runtime globals (migrate, Collection, Field, cronAdd, $app, ...) that a normal JS language server doesn't know about. Disable checking here. Running `pocketbase serve` once generates pb_data/types.d.ts with the real definitions.",
+  "compilerOptions": {
+    "checkJs": false,
+    "allowJs": true,
+    "noEmit": true,
+    "target": "ES2017",
+    "lib": ["ES2017"]
+  },
+  "include": ["pb_migrations/**/*.js", "pb_hooks/**/*.js"]
+}

@@ -1,0 +1,29 @@
+# PocketBase for local dev.
+#
+# The image's ENTRYPOINT already runs:
+#   pocketbase serve --http=0.0.0.0:8090 --dir=/pb_data --publicDir=/pb_public --hooksDir=/pb_hooks
+# so `command:` here only adds the migrations dir. Do NOT repeat `serve` — a
+# bare positional arg is read as an autocert domain and forces HTTPS.
+
+services:
+  pocketbase:
+    image: ghcr.io/muchobien/pocketbase:0.28.4
+    container_name: familysafety-pb
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./pb_data:/pb_data
+      - ./pb_migrations:/pb_migrations
+      - ./pb_hooks:/pb_hooks
+      - ./pb_public:/pb_public # staff dashboard, served at http://host:8090/
+    command:
+      - --migrationsDir=/pb_migrations
+      # macOS bind-mounts spam fs events -> PB restart loop. Disable the watcher;
+      # restart the container after editing a hook.
+      - --hooksWatch=false
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5

@@ -1,0 +1,14 @@
+# This repo deploys the backend (PocketBase + staff dashboard) to Render.
+# The mobile app has its own git repo under app/.
+/app/
+/flutter_app/
+
+node_modules/
+*.log
+
+# secrets / local state
+.env
+backend/pb_data/
+*.key
+
+.DS_Store
