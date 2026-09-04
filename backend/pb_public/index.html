@@ -404,17 +404,27 @@ function renderVerifs(host){
       (b.created||"").localeCompare(a.created||""));
     const attempts = g.items.length;
     const needsReview = g.items.some(v => v.status === "pending_review");
-    const panel = el(`<div class="mb-4 overflow-hidden rounded-xl border ${needsReview ? "border-amber-300 dark:border-amber-500/40" : "border-zinc-200 dark:border-zinc-800"}">
-      <div class="flex items-center gap-3 border-b px-4 py-3 ${needsReview ? "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10" : "border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50"}">
+    const latest = g.items[0];
+    const open = needsReview || attempts === 1;
+    const panel = el(`<div class="mb-3 overflow-hidden rounded-xl border ${needsReview ? "border-amber-300 dark:border-amber-500/40" : "border-zinc-200 dark:border-zinc-800"}">
+      <button data-grouphead class="flex w-full items-center gap-3 border-b px-4 py-3 text-left ${needsReview ? "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10" : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:bg-zinc-800/60"}">
+        <i data-lucide="chevron-right" data-chevron class="!w-4 !h-4 shrink-0 text-zinc-400 transition-transform ${open ? "rotate-90" : ""}"></i>
         <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-zinc-300 text-xs font-bold text-zinc-600 dark:border-zinc-600 dark:text-zinc-300">${esc(initials(g.name))}</div>
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1">
           <div class="truncate text-sm font-bold">${esc(g.name || "Unknown")}</div>
-          <div class="truncate text-xs text-zinc-500">${esc(g.email || "")}</div>
+          <div class="truncate text-xs text-zinc-500">${esc(g.email || "")} · latest: ${esc(VSTATUS[latest.status]?.label || latest.status)}</div>
         </div>
-        ${needsReview ? `<span class="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white">Needs review</span>` : `<span class="ml-auto rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] text-zinc-500 dark:border-zinc-700">${attempts} attempt${attempts>1?"s":""}</span>`}
-      </div>
-      <table class="w-full"><tbody class="divide-y divide-zinc-100 dark:divide-zinc-800/60"></tbody></table>
+        ${needsReview ? `<span class="rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white">Needs review</span>` : `<span class="rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] text-zinc-500 dark:border-zinc-700">${attempts} attempt${attempts>1?"s":""}</span>`}
+      </button>
+      <table class="w-full" data-groupbody ${open ? "" : "hidden"}><tbody class="divide-y divide-zinc-100 dark:divide-zinc-800/60"></tbody></table>
     </div>`);
+    const head = panel.querySelector("[data-grouphead]");
+    head.onclick = () => {
+      const body = panel.querySelector("[data-groupbody]");
+      const chev = panel.querySelector("[data-chevron]");
+      body.hidden = !body.hidden;
+      chev.classList.toggle("rotate-90", !body.hidden);
+    };
     const tb = panel.querySelector("tbody");
     g.items.forEach(v => {
       const cancelledAt = v.status === "cancelled" ? v.updated : null;
