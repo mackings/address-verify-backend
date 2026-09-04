@@ -404,7 +404,7 @@ function renderVerifs(host){
       (b.created||"").localeCompare(a.created||""));
     const attempts = g.items.length;
     const needsReview = g.items.some(v => v.status === "pending_review");
-    const panel = h(`<div class="mb-4 overflow-hidden rounded-xl border ${needsReview ? "border-amber-300 dark:border-amber-500/40" : "border-zinc-200 dark:border-zinc-800"}">
+    const panel = el(`<div class="mb-4 overflow-hidden rounded-xl border ${needsReview ? "border-amber-300 dark:border-amber-500/40" : "border-zinc-200 dark:border-zinc-800"}">
       <div class="flex items-center gap-3 border-b px-4 py-3 ${needsReview ? "border-amber-200 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-500/10" : "border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50"}">
         <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-zinc-300 text-xs font-bold text-zinc-600 dark:border-zinc-600 dark:text-zinc-300">${esc(initials(g.name))}</div>
         <div class="min-w-0">
@@ -418,7 +418,7 @@ function renderVerifs(host){
     const tb = panel.querySelector("tbody");
     g.items.forEach(v => {
       const cancelledAt = v.status === "cancelled" ? v.updated : null;
-      const tr = h(`<tr data-id="${v.id}" class="cursor-pointer transition hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
+      const tr = el(`<tr data-id="${v.id}" class="cursor-pointer transition hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
         <td class="px-4 py-3">
           <div class="flex items-start gap-1">
             <span class="text-sm">${esc(v.claimed_address)}</span>
